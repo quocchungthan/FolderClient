@@ -9,10 +9,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\ractools\opensource-lab\OpensourceLab.FileStorage\OpensourceLab.FileStorage.csproj" />
+    <PackageReference Include="OpensourceLab.FileStorage" Version="1.0.*" />
   </ItemGroup>
 
   <ItemGroup>
