@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 public sealed class LocalSyncState
 {
     public string Cursor { get; set; } = string.Empty;
+    public List<string> AllowedPathWildcards { get; set; } = new();
     public Dictionary<string, LocalFileState> Files { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -27,7 +28,9 @@ public sealed class LocalStateStore
 
     public LocalStateStore(IOptions<SyncClientOptions> options)
     {
-        _statePath = Path.Combine(options.Value.LocalFolderPath, ".sync-client-state.json");
+        var stateDirectory = Path.Combine(AppContext.BaseDirectory, "state");
+        Directory.CreateDirectory(stateDirectory);
+        _statePath = Path.Combine(stateDirectory, ".sync-client-state.json");
     }
 
     public async Task<LocalSyncState> LoadAsync(CancellationToken cancellationToken)
@@ -43,6 +46,7 @@ public sealed class LocalStateStore
             await using var stream = File.OpenRead(_statePath);
             var state = await JsonSerializer.DeserializeAsync<LocalSyncState>(stream, JsonOptions, cancellationToken)
                 ?? new LocalSyncState();
+            state.AllowedPathWildcards ??= new List<string>();
             state.Files ??= new Dictionary<string, LocalFileState>(StringComparer.OrdinalIgnoreCase);
             return state;
         }

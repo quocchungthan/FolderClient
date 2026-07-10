@@ -18,7 +18,7 @@ public sealed class LocalFileScanner
         _options = options.Value;
     }
 
-    public Task<Dictionary<string, ScannedFile>> ScanAsync(CancellationToken cancellationToken)
+    public Task<Dictionary<string, ScannedFile>> ScanAsync(VirtualPathAccessScope accessScope, CancellationToken cancellationToken)
     {
         var root = _options.LocalFolderPath;
         var map = new Dictionary<string, ScannedFile>(StringComparer.OrdinalIgnoreCase);
@@ -35,6 +35,11 @@ public sealed class LocalFileScanner
 
             var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
             var virtualPath = "/" + relative.TrimStart('/');
+            if (!accessScope.IsAllowed(virtualPath))
+            {
+                continue;
+            }
+
             var info = new FileInfo(file);
             map[virtualPath] = new ScannedFile
             {

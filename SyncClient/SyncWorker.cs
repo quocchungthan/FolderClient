@@ -7,6 +7,7 @@ public sealed class SyncWorker : BackgroundService
     private readonly LocalStateStore _stateStore;
     private readonly LocalFileScanner _scanner;
     private readonly SyncClientOptions _options;
+    private VirtualPathAccessScope _accessScope;
 
     public SyncWorker(
         ILogger<SyncWorker> logger,
@@ -20,6 +21,7 @@ public sealed class SyncWorker : BackgroundService
         _stateStore = stateStore;
         _scanner = scanner;
         _options = options.Value;
+        _accessScope = VirtualPathAccessScope.PublicOnly();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -34,8 +36,11 @@ public sealed class SyncWorker : BackgroundService
         if (!string.IsNullOrWhiteSpace(handshake.Cursor))
         {
             state.Cursor = handshake.Cursor;
-            await _stateStore.SaveAsync(state, stoppingToken);
         }
+
+        _accessScope = VirtualPathAccessScope.FromWildcards(handshake.AllowedPathWildcards);
+        state.AllowedPathWildcards = handshake.AllowedPathWildcards ?? new List<string>();
+        await _stateStore.SaveAsync(state, stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,7 +62,7 @@ public sealed class SyncWorker : BackgroundService
 
     private async Task PushLocalChangesAsync(LocalSyncState state, CancellationToken cancellationToken)
     {
-        var scanned = await _scanner.ScanAsync(cancellationToken);
+        var scanned = await _scanner.ScanAsync(_accessScope, cancellationToken);
         var knownPaths = state.Files.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var currentPaths = scanned.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -105,6 +110,13 @@ public sealed class SyncWorker : BackgroundService
         foreach (var path in deleted)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!_accessScope.IsAllowed(path))
+            {
+                state.Files.Remove(path);
+                continue;
+            }
+
             var tombstone = await _apiClient.TombstoneAsync(path, DateTime.UtcNow, cancellationToken);
             if (!tombstone.Succeeded)
             {
@@ -133,6 +145,17 @@ public sealed class SyncWorker : BackgroundService
         foreach (var change in pull.Changes)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!string.IsNullOrWhiteSpace(change.Cursor))
+            {
+                state.Cursor = change.Cursor;
+            }
+
+            if (!_accessScope.IsAllowed(change.Path))
+            {
+                continue;
+            }
+
             var localPath = Path.Combine(_options.LocalFolderPath, change.Path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
             if (change.IsDeleted)
             {
@@ -158,11 +181,6 @@ public sealed class SyncWorker : BackgroundService
                     Size = change.Size,
                     UpdatedAtUtc = change.UpdatedAtUtc
                 };
-            }
-
-            if (!string.IsNullOrWhiteSpace(change.Cursor))
-            {
-                state.Cursor = change.Cursor;
             }
         }
 
