@@ -2,3 +2,4 @@ bin/
 obj/
 .sync-client-state.json
 appsettings.*.json
+artifacts/
